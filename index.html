@@ -1,0 +1,323 @@
+<!-- python3 -m http.server 8000 → http://localhost:8000 -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>MT Alta WMS — Zonas EXP</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="./config.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; color: #eee; }
+    body { display: flex; flex-direction: column; }
+
+    /* ── TABS ── */
+    #tabs { display: flex; background: #111; border-bottom: 2px solid #333; flex-shrink: 0; height: 38px; }
+    .tab-btn { padding: 0 22px; background: none; border: none; color: #aaa; font-size: 13px; cursor: pointer; border-bottom: 3px solid transparent; }
+    .tab-btn.active { color: #fff; border-bottom-color: #e65100; }
+    .tab-btn:hover:not(.active) { color: #ddd; background: #1a1a1a; }
+
+    /* ── MAP ── */
+    #tab-map { display: none; flex: 1; position: relative; }
+    #tab-map.active { display: block; }
+    #map { position: absolute; inset: 0; }
+    .mapboxgl-popup-content { color: #111 !important; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; padding: 14px 16px; border-radius: 8px; }
+    .mapboxgl-popup-close-button { color: #444 !important; font-size: 18px; }
+
+    /* ── ZONES TAB ── */
+    #tab-zones { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+    #tab-zones.active { display: flex; }
+
+    /* Header */
+    #zones-header { background: #111; padding: 5px 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; border-bottom: 1px solid #333; }
+    .badge-exp { background: #e65100; color: #fff; padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 12px; }
+    #zones-title { font-size: 14px; font-weight: 600; }
+    #search-box { padding: 4px 8px; border-radius: 5px; border: 1px solid #555; background: #222; color: #eee; font-size: 12px; width: 140px; }
+    .filter-sel { padding: 4px 7px; border-radius: 5px; border: 1px solid #555; background: #222; color: #eee; font-size: 12px; }
+    #total-badge { background: #222; border: 1px solid #444; padding: 3px 9px; border-radius: 10px; font-size: 12px; color: #bbb; }
+    #zones-meta { margin-left: auto; font-size: 10px; color: #555; }
+    #legend { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .leg-item { display: flex; align-items: center; gap: 3px; font-size: 11px; cursor: pointer; padding: 2px 5px; border-radius: 3px; border: 1px solid transparent; }
+    .leg-item:hover { border-color: #555; }
+    .leg-item.active-filter { border-color: #fff; background: #2a2a2a; }
+    .leg-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+    /* Scale wrapper */
+    #zones-body  { flex: 1; overflow: hidden; position: relative; }
+    #zones-inner { position: absolute; top: 0; left: 0; transform-origin: top left; padding: 16px; display: flex; flex-direction: column; gap: 16px; min-width: 600px; }
+
+    /* Section title */
+    .sec-title { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #666; border-bottom: 1px solid #2a2a2a; padding-bottom: 5px; }
+
+    /* Zone grid */
+    .zone-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    /* Individual zone card */
+    .zone-card {
+      width: 140px; height: 80px; border-radius: 8px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 3px; cursor: pointer;
+      border: 2px solid transparent;
+      transition: filter .12s, border-color .12s, transform .12s;
+      user-select: none; position: relative;
+    }
+    .zone-card:hover { filter: brightness(1.15); border-color: rgba(255,255,255,.5); transform: translateY(-2px); }
+    .zone-card.highlighted { border-color: #fff !important; filter: brightness(1.25); }
+    .zone-card.dimmed { opacity: .2; pointer-events: none; }
+    .zone-card .nom  { font-size: 18px; font-weight: 800; letter-spacing: .5px; }
+    .zone-card .cap  { font-size: 10px; opacity: .8; }
+    .zone-card .prov { font-size: 9px; opacity: .7; letter-spacing: .3px; }
+
+    /* EXP.301 catch-all — full width */
+    .zone-card.catch-all { width: 100%; height: 60px; flex-direction: row; gap: 16px; justify-content: flex-start; padding: 0 20px; }
+    .zone-card.catch-all .nom  { font-size: 20px; }
+    .zone-card.catch-all .info { display: flex; flex-direction: column; gap: 2px; }
+    .zone-card.catch-all .cap  { font-size: 11px; }
+
+    /* Tooltip */
+    #tt { position: fixed; background: #1e1e2e; color: #eee; padding: 10px 14px; border-radius: 7px; font-size: 11px; pointer-events: none; display: none; z-index: 999; border: 1px solid #444; box-shadow: 0 4px 18px rgba(0,0,0,.6); min-width: 180px; max-width: 300px; }
+    .tt-nom  { font-size: 16px; font-weight: 800; margin-bottom: 6px; }
+    .tt-row  { display: flex; justify-content: space-between; gap: 10px; margin-top: 3px; }
+    .tt-lbl  { color: #777; }
+    .tt-geo  { margin-top: 6px; font-size: 10px; color: #bbb; line-height: 1.5; }
+  </style>
+</head>
+<body>
+
+<div id="tabs">
+  <button class="tab-btn active" onclick="showTab('zones')">🚛 Zonas EXP · MT Alta</button>
+  <button class="tab-btn" onclick="showTab('map')">🗺 Mapa de Cobertura</button>
+</div>
+
+<div id="tab-map"><div id="map"></div></div>
+
+<div id="tab-zones" class="active">
+  <div id="zones-header">
+    <span class="badge-exp">EXP · XL</span>
+    <span id="zones-title">MT Alta — Zonas de Cobertura</span>
+    <input id="search-box" type="text" placeholder="Buscar (001, 301...)" oninput="applyFilters()">
+    <select id="filter-proveedor" class="filter-sel" onchange="applyFilters()">
+      <option value="">Todos los proveedores</option>
+    </select>
+    <span id="total-badge">— total</span>
+    <div id="legend"></div>
+    <span id="zones-meta"></span>
+  </div>
+
+  <div id="zones-body">
+    <div id="zones-inner">
+      <div>
+        <div class="sec-title">Zonas Metropolitanas — EXP.001 a EXP.017</div>
+        <div class="zone-grid" id="grid-main" style="margin-top:10px"></div>
+      </div>
+      <div>
+        <div class="sec-title">Zona Nacional — Cobertura Extendida</div>
+        <div id="grid-301" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tt"></div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const GEOJSON = './CN_MTALTA_consolidado_campos.geojson?v=20260529';
+const _MBT = atob('cGsuZXlKMUlqb2liWEl0T1RrdGJXbHVkWFJ2Y3lJc0ltRWlPaUpqYlRGbmRHRm9jRFV3Tm5Kc01tcHZiMlEyY1RaaU5HbDVJbjAuMGRsTkdqaVY5cjhuTGZaVTFkNl82Zw==');
+const MAPBOX_TOKEN = (typeof window.MAPBOX_TOKEN !== 'undefined' && window.MAPBOX_TOKEN) ? window.MAPBOX_TOKEN : _MBT;
+
+// ── Colours ───────────────────────────────────────────────────────────────────
+const PC = { '99minutos':'#e65100', '#N/D':'#888888' };
+const pColor = p => PC[p] || '#666';
+const isLight = h => { const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16); return(r*299+g*587+b*114)/1000>150; };
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let allFeats = [], FM = {}, mapGL = null;
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function showTab(id) {
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',(i===0&&id==='zones')||(i===1&&id==='map')));
+  document.getElementById('tab-map').classList.toggle('active', id==='map');
+  document.getElementById('tab-zones').classList.toggle('active', id==='zones');
+  if(id==='map'&&!mapGL) initMap();
+  if(id==='map'&&mapGL) mapGL.resize();
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+const ttEl = document.getElementById('tt');
+function showTip(e, nom) {
+  const p=FM[nom]; if(!p) return;
+  const c=pColor(p.proveedor);
+  const com  = p.COMUNA   ? p.COMUNA.split(';').slice(0,5).join(', ')+(p.COMUNA.split(';').length>5?' …':'')  : '—';
+  const reg  = p.REGION   ? p.REGION.split(';').join(', ')   : '—';
+  const pols = p.poligonos ? p.poligonos.split(';').length : 0;
+  ttEl.innerHTML=`<div class="tt-nom" style="color:${c}">${p.zonificacion}</div>
+    <div class="tt-row"><span class="tt-lbl">Proveedor</span><strong style="color:${c}">${p.proveedor}</strong></div>
+    <div class="tt-row"><span class="tt-lbl">Estación</span><strong>${p.station||'—'}</strong></div>
+    <div class="tt-row"><span class="tt-lbl">Capacidad</span><strong>${p.capacity} polígonos</strong></div>
+    <div class="tt-row"><span class="tt-lbl">Servicio</span><strong>${p.service} · XL</strong></div>
+    <div class="tt-geo"><b>Comunas:</b> ${com}<br><b>Región:</b> ${reg}</div>`;
+  ttEl.style.display='block'; moveTip(e);
+}
+function moveTip(e) {
+  ttEl.style.left=Math.min(e.clientX+14,innerWidth-310)+'px';
+  ttEl.style.top =Math.min(e.clientY+14,innerHeight-200)+'px';
+}
+function hideTip() { ttEl.style.display='none'; }
+
+// ── Zone card ─────────────────────────────────────────────────────────────────
+function mkCard(p, catchAll=false) {
+  const c   = pColor(p.proveedor);
+  const txt = isLight(c)?'#111':'#fff';
+  const card = document.createElement('div');
+  card.className = 'zone-card' + (catchAll?' catch-all':'');
+  card.id = 'card-'+p.nomenclatura;
+  card.style.background = c;
+  card.style.color = txt;
+
+  if (catchAll) {
+    card.innerHTML = `
+      <div class="nom">${p.zonificacion}</div>
+      <div class="info">
+        <div class="cap">${p.capacity} polígonos · Cobertura nacional extendida</div>
+        <div class="prov">${p.proveedor} · ${p.service} XL</div>
+      </div>`;
+  } else {
+    card.innerHTML = `
+      <div class="nom">${p.zonificacion}</div>
+      <div class="cap">${p.capacity} pol.</div>
+      <div class="prov">${p.proveedor}</div>`;
+  }
+
+  card.addEventListener('mouseenter', e=>showTip(e, p.nomenclatura));
+  card.addEventListener('mousemove',  e=>moveTip(e));
+  card.addEventListener('mouseleave', hideTip);
+  card.addEventListener('click', ()=>{
+    document.querySelectorAll('.zone-card.highlighted').forEach(c=>c.classList.remove('highlighted'));
+    card.classList.add('highlighted');
+    showTab('map'); if(mapGL) flyTo(p.nomenclatura);
+  });
+  return card;
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render() {
+  const gridMain = document.getElementById('grid-main');
+  const grid301  = document.getElementById('grid-301');
+  gridMain.innerHTML = ''; grid301.innerHTML = '';
+
+  allFeats.forEach(ft => {
+    const p = ft.properties;
+    if (p.nomenclatura === '301') grid301.appendChild(mkCard(p, true));
+    else gridMain.appendChild(mkCard(p, false));
+  });
+
+  scaleToFit();
+}
+
+function scaleToFit() {
+  const body  = document.getElementById('zones-body');
+  const inner = document.getElementById('zones-inner');
+  inner.style.transform = 'none';
+  const scale = Math.min(body.clientWidth/inner.scrollWidth, body.clientHeight/inner.scrollHeight, 1);
+  inner.style.transform = `scale(${scale})`;
+}
+window.addEventListener('resize', scaleToFit);
+
+// ── Filters ───────────────────────────────────────────────────────────────────
+function applyFilters() {
+  const s = document.getElementById('search-box').value.trim().toLowerCase();
+  const p = document.getElementById('filter-proveedor').value;
+  let vis = 0;
+  document.querySelectorAll('.zone-card').forEach(card => {
+    const nom = card.id.replace('card-','');
+    const fp = FM[nom]; if(!fp) return;
+    const ok = (!s||nom.includes(s)||fp.zonificacion.toLowerCase().includes(s)||fp.COMUNA?.toLowerCase().includes(s))
+             && (!p||fp.proveedor===p);
+    card.classList.toggle('dimmed',!ok); if(ok) vis++;
+  });
+  document.getElementById('total-badge').textContent = `${vis} zonas`;
+}
+
+function buildControls() {
+  const provs = [...new Set(allFeats.map(f=>f.properties.proveedor))].sort();
+  const ps = document.getElementById('filter-proveedor');
+  provs.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;ps.appendChild(o);});
+  const leg = document.getElementById('legend');
+  provs.forEach(p=>{
+    const cnt = allFeats.filter(f=>f.properties.proveedor===p).length;
+    const item = document.createElement('div'); item.className='leg-item';
+    item.innerHTML=`<span class="leg-dot" style="background:${pColor(p)}"></span>${p} <span style="color:#666">(${cnt})</span>`;
+    item.addEventListener('click',()=>{
+      const el=document.getElementById('filter-proveedor');
+      el.value=el.value===p?'':p;
+      document.querySelectorAll('.leg-item').forEach(i=>i.classList.remove('active-filter'));
+      if(el.value===p)item.classList.add('active-filter');
+      applyFilters();
+    });
+    leg.appendChild(item);
+  });
+}
+
+// ── Map ───────────────────────────────────────────────────────────────────────
+function initMap() {
+  mapboxgl.accessToken = MAPBOX_TOKEN;
+  mapGL = new mapboxgl.Map({container:'map', style:'mapbox://styles/mapbox/streets-v11', center:[-71.543,-35.675], zoom:4.5});
+  mapGL.addControl(new mapboxgl.NavigationControl());
+  mapGL.on('load', ()=>{
+    mapGL.addSource('exp', {type:'geojson', data:GEOJSON});
+    const cExpr = ['match',['get','proveedor'],...Object.entries(PC).flat(),'#888'];
+    mapGL.addLayer({id:'exp-fill', type:'fill', source:'exp', paint:{'fill-color':cExpr,'fill-opacity':0.45}});
+    mapGL.addLayer({id:'exp-line', type:'line', source:'exp', paint:{'line-color':'#000','line-width':0.4}});
+    mapGL.addLayer({id:'exp-hl',   type:'fill', source:'exp', paint:{'fill-color':'#ff4400','fill-opacity':0.85}, filter:['==','nomenclatura','__none__']});
+    mapGL.addLayer({id:'exp-hl-line', type:'line', source:'exp', paint:{'line-color':'#ff4400','line-width':4}, filter:['==','nomenclatura','__none__']});
+
+    mapGL.on('click','exp-fill', e=>{
+      const p=e.features[0].properties; const c=pColor(p.proveedor);
+      const fondo = p.color_etiqueta===1||p.color_etiqueta==='1'?'Negro':'Blanco';
+      const com   = p.COMUNA  ? p.COMUNA.split(';').join(', ')  : '—';
+      const reg   = p.REGION  ? p.REGION.split(';').join(', ')  : '—';
+      new mapboxgl.Popup({maxWidth:'320px'}).setLngLat(e.lngLat).setHTML(`
+        <strong style="color:${c};font-size:14px">${p.zonificacion}</strong><br>
+        <b>Proveedor:</b> ${p.proveedor}<br>
+        <b>Estación:</b> ${p.station||'—'}<br>
+        <b>Capacidad:</b> ${p.capacity} polígonos<br>
+        <b>Servicio:</b> ${p.service} · XL<br>
+        <hr style="border:none;border-top:1px solid #ddd;margin:6px 0">
+        <b>Comunas:</b> <span style="font-size:11px;color:#444">${com}</span><br>
+        <b>Región:</b>  <span style="font-size:11px;color:#444">${reg}</span>
+      `).addTo(mapGL);
+    });
+    mapGL.on('mouseenter','exp-fill',()=>mapGL.getCanvas().style.cursor='pointer');
+    mapGL.on('mouseleave','exp-fill',()=>mapGL.getCanvas().style.cursor='');
+  });
+}
+
+function flyTo(nom) {
+  fetch(GEOJSON).then(r=>r.json()).then(data=>{
+    const feat=data.features.find(f=>f.properties.nomenclatura===nom); if(!feat) return;
+    const coords=[]; const col=c=>{if(typeof c[0]==='number')coords.push(c);else c.forEach(col);}; col(feat.geometry.coordinates);
+    if(!coords.length) return;
+    const lons=coords.map(c=>c[0]), lats=coords.map(c=>c[1]);
+    mapGL.fitBounds([[Math.min(...lons),Math.min(...lats)],[Math.max(...lons),Math.max(...lats)]],{padding:60,maxZoom:12});
+    mapGL.setFilter('exp-hl',    ['==','nomenclatura',nom]);
+    mapGL.setFilter('exp-hl-line',['==','nomenclatura',nom]);
+    setTimeout(()=>{ mapGL.setFilter('exp-hl',['==','nomenclatura','__none__']); mapGL.setFilter('exp-hl-line',['==','nomenclatura','__none__']); },3000);
+  });
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+fetch(GEOJSON).then(r=>r.json()).then(data=>{
+  allFeats = data.features.sort((a,b)=>parseInt(a.properties.nomenclatura)-parseInt(b.properties.nomenclatura));
+  allFeats.forEach(f=>{ FM[f.properties.nomenclatura]=f.properties; });
+  const station = allFeats.find(f=>f.properties.station)?.properties.station||'';
+  document.getElementById('zones-title').textContent = `MT Alta — Zonas EXP · ${station}`;
+  document.getElementById('zones-meta').textContent  = `${GEOJSON.split('/').pop().split('?')[0]} · ${allFeats.length} zonas`;
+  document.getElementById('total-badge').textContent = `${allFeats.length} zonas`;
+  buildControls(); render();
+});
+</script>
+</body>
+</html>
