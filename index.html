@@ -3,7 +3,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>MT Alta WMS — Zonas EXP</title>
+  <title>MT Alta WMS — SPT XL</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="./config.js"></script>
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
@@ -87,7 +87,7 @@
 <body>
 
 <div id="tabs">
-  <button class="tab-btn active" onclick="showTab('zones')">🚛 Zonas EXP · MT Alta</button>
+  <button class="tab-btn active" onclick="showTab('zones')">🚛 SPT XL · MT Alta</button>
   <button class="tab-btn" onclick="showTab('map')">🗺 Mapa de Cobertura</button>
 </div>
 
@@ -95,8 +95,8 @@
 
 <div id="tab-zones" class="active">
   <div id="zones-header">
-    <span class="badge-exp">EXP · XL</span>
-    <span id="zones-title">MT Alta — Zonas de Cobertura</span>
+    <span class="badge-exp">SPT · XL</span>
+    <span id="zones-title">MT Alta — SPT XL</span>
     <input id="search-box" type="text" placeholder="Buscar (001, 301...)" oninput="applyFilters()">
     <select id="filter-proveedor" class="filter-sel" onchange="applyFilters()">
       <option value="">Todos los proveedores</option>
@@ -109,7 +109,7 @@
   <div id="zones-body">
     <div id="zones-inner">
       <div>
-        <div class="sec-title">Zonas Metropolitanas — EXP.001 a EXP.017</div>
+        <div class="sec-title">Zonas Metropolitanas — SPT XL · 001 a 017</div>
         <div class="zone-grid" id="grid-main" style="margin-top:10px"></div>
       </div>
       <div>
@@ -313,7 +313,7 @@ fetch(GEOJSON).then(r=>r.json()).then(data=>{
   allFeats = data.features.sort((a,b)=>parseInt(a.properties.nomenclatura)-parseInt(b.properties.nomenclatura));
   allFeats.forEach(f=>{ FM[f.properties.nomenclatura]=f.properties; });
   const station = allFeats.find(f=>f.properties.station)?.properties.station||'';
-  document.getElementById('zones-title').textContent = `MT Alta — Zonas EXP · ${station}`;
+  document.getElementById('zones-title').textContent = `MT Alta — SPT XL · ${station}`;
   document.getElementById('zones-meta').textContent  = `${GEOJSON.split('/').pop().split('?')[0]} · ${allFeats.length} zonas`;
   document.getElementById('total-badge').textContent = `${allFeats.length} zonas`;
   buildControls(); render();
